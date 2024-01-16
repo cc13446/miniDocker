@@ -15,8 +15,8 @@ func NewParentProcess(tty bool, command string) *exec.Cmd {
 	cmd := exec.Command("/proc/self/exe", args...)
 	// 命名空间隔离参数
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS |
-			syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
+		Cloneflags:   syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
+		Unshareflags: syscall.CLONE_NEWNS,
 	}
 	if tty {
 		cmd.Stdin = os.Stdin

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cc.com/miniDocker/cgroups/subsystems"
 	"cc.com/miniDocker/container"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -14,6 +15,9 @@ Enjoy it, just for fun.
 `
 
 const ttyFlagName = "ti"
+const memoryMaxFlagName = "memMax"
+const cpuMaxFlagName = "cpuMax"
+const cpuSetFlagName = "cpuSet"
 
 func main() {
 
@@ -32,9 +36,8 @@ func main() {
 		Usage: "Init container process and run user's process in container. Do not call it outside.",
 		Action: func(context *cli.Context) error {
 			log.Infof("Begin init")
-			cmd := context.Args().Get(0)
 			// run init process
-			return container.RunContainerInitProcess(cmd, nil)
+			return container.RunContainerInitProcess()
 		},
 	}
 
@@ -46,15 +49,37 @@ func main() {
 				Name:  ttyFlagName,
 				Usage: "enable tty",
 			},
+			&cli.StringFlag{
+				Name:  memoryMaxFlagName,
+				Usage: "memory limit",
+			},
+			&cli.StringFlag{
+				Name:  cpuMaxFlagName,
+				Usage: "cpu limit",
+			},
+			&cli.StringFlag{
+				Name:  cpuSetFlagName,
+				Usage: "cpuSet limit",
+			},
 		},
 		// 解析参数，然后运行容器
 		Action: func(context *cli.Context) error {
 			if context.Args().Len() < 1 {
 				return fmt.Errorf("missing container command")
 			}
-			cmd := context.Args().Get(0)
+
+			var cmdArray []string
+			for _, arg := range context.Args().Slice() {
+				cmdArray = append(cmdArray, arg)
+			}
 			tty := context.Bool(ttyFlagName)
-			Run(tty, cmd)
+			resConf := &subsystems.ResourceConfig{
+				MemoryMax: context.String(memoryMaxFlagName),
+				CpuSet:    context.String(cpuSetFlagName),
+				CpuMax:    context.String(cpuMaxFlagName),
+			}
+
+			Run(tty, cmdArray, resConf)
 			return nil
 		},
 	}

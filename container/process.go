@@ -3,30 +3,42 @@ package container
 import (
 	log "github.com/sirupsen/logrus"
 	"os"
+	"os/exec"
 	"syscall"
 )
 
-// RunContainerInitProcess 启动容器进程
-func RunContainerInitProcess(command string, args []string) error {
-	log.Infof("Command is %s", command)
-
-	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-
-	// 挂载 proc
-	if err := syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), ""); err != nil {
-		log.Errorf("Fail to mount /proc, error is %v", err)
+// NewParentProcess 新建容器父进程
+func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+	// 管道
+	readPipe, writePipe, err := NewPipe()
+	if err != nil {
+		log.Errorf("New pipe error %v", err)
+		return nil, nil
 	}
 
-	// 启动进程
-	argv := []string{command}
-	if err := syscall.Exec(command, argv, os.Environ()); err != nil {
-		log.Errorf(err.Error())
+	// 传入参数，执行：miniDocker init [command]
+	// 在/proc/self/目录下路径是进程自己的环境
+	// 其中的exe为进程自己的可执行文件
+	cmd := exec.Command("/proc/self/exe", "init")
+	// 命名空间隔离参数
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:   syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
+		Unshareflags: syscall.CLONE_NEWNS,
 	}
-
-	// 卸载 proc
-	if err := syscall.Unmount("proc", defaultMountFlags); err != nil {
-		log.Errorf("Fail to unmount /proc, error is %v", err)
+	cmd.ExtraFiles = []*os.File{readPipe}
+	if tty {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
+	return cmd, writePipe
+}
 
-	return nil
+// NewPipe 生成管道
+func NewPipe() (*os.File, *os.File, error) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	return read, write, nil
 }

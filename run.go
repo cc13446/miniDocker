@@ -41,13 +41,14 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig) {
 	if err := parent.Wait(); err != nil {
 		log.Errorf("Error wait parent process, error is %v", err)
 	}
+	container.DeleteWorkSpace()
 	os.Exit(-1)
 }
 
 // sendInitCommand 向子进程发送命令
 func sendInitCommand(commandArray []string, writePipe *os.File) {
 	command := strings.Join(commandArray, " ")
-	log.Infof("User command is %s", command)
+	log.Infof("User command is %s, send to child", command)
 	if _, err := writePipe.WriteString(command); err != nil {
 		log.Fatalf("Write user command to child process failed, error is : %v", err)
 	}

@@ -54,6 +54,12 @@ func readUserCommand() []string {
 
 // setUpMount 挂载
 func setUpMount() {
+	// systemd 加入 linux 之后, mount namespace 就变成 shared by default, 所以你必须显示声明你要这个新的 mount namespace 独立
+	// 如果不先做 private mount，会导致挂载事件外泄，后续执行 pivotRoot 会出现 invalid argument 错误
+	if err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
+		log.Errorf("")
+	}
+
 	// 修改容器 root 目录
 	pwd, err := os.Getwd()
 	if err != nil {

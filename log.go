@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/hpcloud/tail"
 	log "github.com/sirupsen/logrus"
-	"os"
 	"path"
 )
 
@@ -13,17 +12,11 @@ import (
 func logContainer(containerName string) {
 	infoPath := fmt.Sprintf(container.DefaultInfoLocation, containerName)
 	logFilePath := path.Join(infoPath, container.LogFileName)
-	file, err := os.Open(logFilePath)
-	defer func(file *os.File) {
-		if err := file.Close(); err != nil {
-			log.Errorf("Close file %s error %v", logFilePath, err)
-		}
-	}(file)
-	if err != nil {
-		log.Errorf("Log container open file %s error %v", logFilePath, err)
-		return
-	}
+
 	t, err := tail.TailFile(logFilePath, tail.Config{Follow: true})
+	if err != nil {
+		log.Errorf("Tail file %s error %v", logFilePath, err)
+	}
 	for line := range t.Lines {
 		fmt.Println(line.Text)
 	}

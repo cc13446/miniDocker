@@ -14,9 +14,10 @@ const LowerPath = RootPath + "busybox"
 const UpperPath = RootPath + "upper"
 const WorkPath = RootPath + "work"
 const MergedPath = RootPath + "merged"
+const ImagePath = RootPath + "image"
 
 // NewParentProcess 新建容器父进程
-func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 	// 管道
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
@@ -39,7 +40,7 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	}
-	NewWorkSpace(RootPath)
+	NewWorkSpace(RootPath, volume)
 	cmd.Dir = MergedPath
 	return cmd, writePipe
 }
@@ -54,10 +55,18 @@ func NewPipe() (*os.File, *os.File, error) {
 }
 
 // NewWorkSpace Create an Overlay2 filesystem as container root workspace
-func NewWorkSpace(rootPath string) {
+func NewWorkSpace(rootPath string, volume string) {
 	CreateLower(rootPath)
 	CreateDirs()
 	MountOverlayFS()
+	if volume != "" {
+		hostPath, containerPath, err := volumeExtract(volume)
+		if err != nil {
+			log.Errorf("Extract volume failed，maybe volume parameter input is not correct，detail:%v", err)
+			return
+		}
+		mountVolume(MergedPath, hostPath, containerPath)
+	}
 }
 
 func CreateLower(rootPath string) {
@@ -107,7 +116,18 @@ func MountOverlayFS() {
 }
 
 // DeleteWorkSpace Delete the Overlay2 filesystem while container exit
-func DeleteWorkSpace() {
+func DeleteWorkSpace(volume string) {
+
+	// 如果指定了 volume 则需要 umount volume
+	// NOTE: 一定要要先 umount volume ，然后再删除目录，否则由于 bind mount 存在，删除临时目录会导致 volume 目录中的数据丢失。
+	if volume != "" {
+		_, containerPath, err := volumeExtract(volume)
+		if err != nil {
+			log.Errorf("extract volume failed，maybe volume parameter input is not correct，detail:%v", err)
+			return
+		}
+		umountVolume(MergedPath, containerPath)
+	}
 	UmountOverlayFS()
 	DeleteDirs()
 }

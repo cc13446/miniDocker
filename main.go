@@ -18,6 +18,7 @@ const ttyFlagName = "ti"
 const memoryMaxFlagName = "memMax"
 const cpuMaxFlagName = "cpuMax"
 const cpuSetFlagName = "cpuSet"
+const volumeFlagName = "v"
 
 func main() {
 
@@ -43,23 +44,27 @@ func main() {
 
 	runCommand := cli.Command{
 		Name:  "run",
-		Usage: "Create a container with namespace and cgroups limit.\nminiDocker run -ti [command]",
+		Usage: "Create a container with namespace and cgroups limit.\nUsage: miniDocker run -ti [command]",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  ttyFlagName,
-				Usage: "enable tty",
+				Usage: "enable tty; Usage -ti",
 			},
 			&cli.StringFlag{
 				Name:  memoryMaxFlagName,
-				Usage: "memory limit",
+				Usage: "memory limit; Usage -memMax 100m",
 			},
 			&cli.StringFlag{
 				Name:  cpuMaxFlagName,
-				Usage: "cpu limit",
+				Usage: "cpu limit; Usage -cpuMax 1000",
 			},
 			&cli.StringFlag{
 				Name:  cpuSetFlagName,
-				Usage: "cpuSet limit",
+				Usage: "cpuSet limit; Usage -cpuSet 2",
+			},
+			&cli.StringFlag{
+				Name:  volumeFlagName,
+				Usage: "volume; Usage: -v /etc/conf:/etc/conf",
 			},
 		},
 		// 解析参数，然后运行容器
@@ -78,13 +83,29 @@ func main() {
 				CpuSet:    context.String(cpuSetFlagName),
 				CpuMax:    context.String(cpuMaxFlagName),
 			}
+			log.Info("Resolve cgroups conf :", resConf)
 
-			Run(tty, cmdArray, resConf)
+			volume := context.String(volumeFlagName)
+			log.Infof("Resolve volume conf : %s", volume)
+			Run(tty, cmdArray, resConf, volume)
 			return nil
 		},
 	}
 
-	app.Commands = []*cli.Command{&initCommand, &runCommand}
+	commitCommand := cli.Command{
+		Name:  "commit",
+		Usage: "Commit a container into image.\nUsage: miniDocker commit [image name]",
+		Action: func(context *cli.Context) error {
+			if context.Args().Len() < 1 {
+				return fmt.Errorf("missing image name")
+			}
+			imageName := context.Args().Get(0)
+			commitContainer(imageName)
+			return nil
+		},
+	}
+
+	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)

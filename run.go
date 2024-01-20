@@ -38,8 +38,10 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 
 	sendInitCommand(commandArray, writePipe)
 
-	if err := parent.Wait(); err != nil {
-		log.Errorf("Error wait parent process, error is %v", err)
+	if tty {
+		if err := parent.Wait(); err != nil {
+			log.Errorf("Error wait parent process, error is %v", err)
+		}
 	}
 	container.DeleteWorkSpace(volume)
 	os.Exit(-1)

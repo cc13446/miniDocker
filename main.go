@@ -15,6 +15,7 @@ Enjoy it, just for fun.
 `
 
 const ttyFlagName = "ti"
+const detachFlagName = "d"
 const memoryMaxFlagName = "memMax"
 const cpuMaxFlagName = "cpuMax"
 const cpuSetFlagName = "cpuSet"
@@ -50,6 +51,10 @@ func main() {
 				Name:  ttyFlagName,
 				Usage: "enable tty; Usage -ti",
 			},
+			&cli.BoolFlag{
+				Name:  detachFlagName,
+				Usage: "detach container; Usage -d",
+			},
 			&cli.StringFlag{
 				Name:  memoryMaxFlagName,
 				Usage: "memory limit; Usage -memMax 100m",
@@ -77,7 +82,13 @@ func main() {
 			for _, arg := range context.Args().Slice() {
 				cmdArray = append(cmdArray, arg)
 			}
+
 			tty := context.Bool(ttyFlagName)
+			detach := context.Bool(detachFlagName)
+			if tty && detach {
+				return fmt.Errorf("ti and d parameter can not both provided")
+			}
+
 			resConf := &subsystems.ResourceConfig{
 				MemoryMax: context.String(memoryMaxFlagName),
 				CpuSet:    context.String(cpuSetFlagName),

@@ -4,13 +4,19 @@ import (
 	"cc.com/miniDocker/cgroups"
 	"cc.com/miniDocker/cgroups/subsystems"
 	"cc.com/miniDocker/container"
+	"encoding/json"
+	"fmt"
 	log "github.com/sirupsen/logrus"
+	"math/rand"
 	"os"
+	"path"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Run 运行容器
-func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume string) {
+func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume string, containerName string) {
 	parent, writePipe := container.NewParentProcess(tty, volume)
 	if parent == nil {
 		log.Errorf("New parent process error")
@@ -19,6 +25,14 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 	if err := parent.Start(); err != nil {
 		log.Errorf("Error start parent process, error is %v", err)
 	}
+
+	// record container info
+	containerName, err := recordContainerInfo(parent.Process.Pid, commandArray, containerName)
+	if err != nil {
+		log.Errorf("Record container info error %v", err)
+		return
+	}
+
 	// 新建 cgroups
 	cgroupsManager := cgroups.NewCgroupsManager("miniDocker-cgroups")
 
@@ -42,6 +56,7 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 		if err := parent.Wait(); err != nil {
 			log.Errorf("Error wait parent process, error is %v", err)
 		}
+		deleteContainerInfo(containerName)
 	}
 	container.DeleteWorkSpace(volume)
 	os.Exit(-1)
@@ -57,4 +72,74 @@ func sendInitCommand(commandArray []string, writePipe *os.File) {
 	if err := writePipe.Close(); err != nil {
 		log.Errorf("Close pipe failed, error is : %v", err)
 	}
+}
+
+// recordContainerInfo 记录容器信息
+func recordContainerInfo(containerPID int, commandArray []string, containerName string) (string, error) {
+	id := randStringBytes(10)
+	createTime := time.Now().Format("2006-01-02 15:04:05")
+	command := strings.Join(commandArray, "")
+	if containerName == "" {
+		containerName = id
+	}
+
+	// 生成容器信息
+	containerInfo := &container.Info{
+		Id:          id,
+		Pid:         strconv.Itoa(containerPID),
+		Command:     command,
+		CreatedTime: createTime,
+		Status:      container.RUNNING,
+		Name:        containerName,
+	}
+	jsonBytes, err := json.Marshal(containerInfo)
+	if err != nil {
+		log.Errorf("Parse container info to json error %v", err)
+		return "", err
+	}
+	jsonStr := string(jsonBytes)
+
+	// 生成容器信息文件
+	infoPath := fmt.Sprintf(container.DefaultInfoLocation, containerName)
+	if err := os.MkdirAll(infoPath, 0622); err != nil {
+		log.Errorf("Mkdir path %s error %v", infoPath, err)
+		return "", err
+	}
+	fileName := path.Join(infoPath, container.ConfigName)
+	file, err := os.Create(fileName)
+	defer func(file *os.File) {
+		if err := file.Close(); err != nil {
+			log.Errorf("Close file %s error %v", fileName, err)
+		}
+	}(file)
+	if err != nil {
+		log.Errorf("Create file %s error %v", fileName, err)
+		return "", err
+	}
+
+	// 记录容器信息到文件
+	if _, err := file.WriteString(jsonStr); err != nil {
+		log.Errorf("File write string error %v", err)
+		return "", err
+	}
+
+	return containerName, nil
+}
+
+func deleteContainerInfo(containerName string) {
+	infoPath := fmt.Sprintf(container.DefaultInfoLocation, containerName)
+	if err := os.RemoveAll(infoPath); err != nil {
+		log.Errorf("Remove dir %s error %v", infoPath, err)
+	}
+}
+
+// randStringBytes 生成16进制随机字符串
+func randStringBytes(n int) string {
+	letterBytes := "1234567890abcd"
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
 }

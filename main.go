@@ -20,6 +20,7 @@ const memoryMaxFlagName = "memMax"
 const cpuMaxFlagName = "cpuMax"
 const cpuSetFlagName = "cpuSet"
 const volumeFlagName = "v"
+const containerNameFlagName = "name"
 
 func main() {
 
@@ -71,6 +72,10 @@ func main() {
 				Name:  volumeFlagName,
 				Usage: "volume; Usage: -v /etc/conf:/etc/conf",
 			},
+			&cli.StringFlag{
+				Name:  containerNameFlagName,
+				Usage: "container name; Usage: -name [name]",
+			},
 		},
 		// 解析参数，然后运行容器
 		Action: func(context *cli.Context) error {
@@ -98,7 +103,9 @@ func main() {
 
 			volume := context.String(volumeFlagName)
 			log.Infof("Resolve volume conf : %s", volume)
-			Run(tty, cmdArray, resConf, volume)
+
+			name := context.String(containerNameFlagName)
+			Run(tty, cmdArray, resConf, volume, name)
 			return nil
 		},
 	}

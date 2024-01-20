@@ -17,7 +17,7 @@ const MergedPath = RootPath + "merged"
 const ImagePath = RootPath + "image"
 
 // NewParentProcess 新建容器父进程
-func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string, containerName string) (*exec.Cmd, *os.File) {
 	// 管道
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
@@ -39,6 +39,19 @@ func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+	} else {
+		infoPath := fmt.Sprintf(DefaultInfoLocation, containerName)
+		if err := os.MkdirAll(infoPath, 0622); err != nil {
+			log.Errorf("NewParentProcess mkdir %s error %v", infoPath, err)
+			return nil, nil
+		}
+		stdLogFilePath := path.Join(infoPath, LogFileName)
+		stdLogFile, err := os.Create(stdLogFilePath)
+		if err != nil {
+			log.Errorf("NewParentProcess create file %s error %v", stdLogFilePath, err)
+			return nil, nil
+		}
+		cmd.Stdout = stdLogFile
 	}
 	NewWorkSpace(RootPath, volume)
 	cmd.Dir = MergedPath

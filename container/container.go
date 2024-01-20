@@ -7,7 +7,8 @@ const (
 )
 const (
 	DefaultInfoLocation string = "/var/run/miniDocker/info/%s/"
-	ConfigName          string = "config.json"
+	ConfigFileName      string = "config.json"
+	LogFileName         string = "container.log"
 )
 
 type Info struct {

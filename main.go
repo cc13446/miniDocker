@@ -123,7 +123,29 @@ func main() {
 		},
 	}
 
-	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand}
+	var listCommand = cli.Command{
+		Name:  "ps",
+		Usage: "List all the containers.\nUsage: miniDocker ps",
+		Action: func(context *cli.Context) error {
+			ListContainers()
+			return nil
+		},
+	}
+
+	var logCommand = cli.Command{
+		Name:  "logs",
+		Usage: "Print logs of a container.\n Usage: miniDocker logs [containerName]",
+		Action: func(context *cli.Context) error {
+			if context.Args().Len() < 1 {
+				return fmt.Errorf("please input your container name")
+			}
+			containerName := context.Args().Get(0)
+			logContainer(containerName)
+			return nil
+		},
+	}
+
+	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand, &listCommand, &logCommand}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)

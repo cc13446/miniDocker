@@ -17,7 +17,12 @@ import (
 
 // Run 运行容器
 func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume string, containerName string) {
-	parent, writePipe := container.NewParentProcess(tty, volume)
+	containerId := randStringBytes(10)
+	if containerName == "" {
+		containerName = containerId
+	}
+
+	parent, writePipe := container.NewParentProcess(tty, volume, containerName)
 	if parent == nil {
 		log.Errorf("New parent process error")
 		return
@@ -27,8 +32,7 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 	}
 
 	// record container info
-	containerName, err := recordContainerInfo(parent.Process.Pid, commandArray, containerName)
-	if err != nil {
+	if err := recordContainerInfo(parent.Process.Pid, commandArray, containerName, containerId); err != nil {
 		log.Errorf("Record container info error %v", err)
 		return
 	}
@@ -75,17 +79,13 @@ func sendInitCommand(commandArray []string, writePipe *os.File) {
 }
 
 // recordContainerInfo 记录容器信息
-func recordContainerInfo(containerPID int, commandArray []string, containerName string) (string, error) {
-	id := randStringBytes(10)
+func recordContainerInfo(containerPID int, commandArray []string, containerName, containerId string) error {
 	createTime := time.Now().Format("2006-01-02 15:04:05")
 	command := strings.Join(commandArray, "")
-	if containerName == "" {
-		containerName = id
-	}
 
 	// 生成容器信息
 	containerInfo := &container.Info{
-		Id:          id,
+		Id:          containerId,
 		Pid:         strconv.Itoa(containerPID),
 		Command:     command,
 		CreatedTime: createTime,
@@ -95,7 +95,7 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName 
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {
 		log.Errorf("Parse container info to json error %v", err)
-		return "", err
+		return err
 	}
 	jsonStr := string(jsonBytes)
 
@@ -103,9 +103,9 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName 
 	infoPath := fmt.Sprintf(container.DefaultInfoLocation, containerName)
 	if err := os.MkdirAll(infoPath, 0622); err != nil {
 		log.Errorf("Mkdir path %s error %v", infoPath, err)
-		return "", err
+		return err
 	}
-	fileName := path.Join(infoPath, container.ConfigName)
+	fileName := path.Join(infoPath, container.ConfigFileName)
 	file, err := os.Create(fileName)
 	defer func(file *os.File) {
 		if err := file.Close(); err != nil {
@@ -114,16 +114,16 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName 
 	}(file)
 	if err != nil {
 		log.Errorf("Create file %s error %v", fileName, err)
-		return "", err
+		return err
 	}
 
 	// 记录容器信息到文件
 	if _, err := file.WriteString(jsonStr); err != nil {
 		log.Errorf("File write string error %v", err)
-		return "", err
+		return err
 	}
 
-	return containerName, nil
+	return nil
 }
 
 func deleteContainerInfo(containerName string) {

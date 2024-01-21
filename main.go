@@ -169,7 +169,28 @@ func main() {
 		},
 	}
 
-	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand, &listCommand, &logCommand, &execCommand}
+	var stopCommand = cli.Command{
+		Name:  "stop",
+		Usage: "Stop a container. \n Usage: miniDocker stop [name]",
+		Action: func(context *cli.Context) error {
+			if context.Args().Len() < 1 {
+				return fmt.Errorf("missing container name")
+			}
+			containerName := context.Args().Get(0)
+			stopContainer(containerName)
+			return nil
+		},
+	}
+
+	app.Commands = []*cli.Command{
+		&initCommand,
+		&runCommand,
+		&commitCommand,
+		&listCommand,
+		&logCommand,
+		&execCommand,
+		&stopCommand,
+	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)

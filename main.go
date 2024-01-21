@@ -182,6 +182,19 @@ func main() {
 		},
 	}
 
+	var removeCommand = cli.Command{
+		Name:  "rm",
+		Usage: "Remove unused containers.\n Usage: miniDocker rm [name]",
+		Action: func(context *cli.Context) error {
+			if context.Args().Len() < 1 {
+				return fmt.Errorf("missing container name")
+			}
+			containerName := context.Args().Get(0)
+			removeContainer(containerName)
+			return nil
+		},
+	}
+
 	app.Commands = []*cli.Command{
 		&initCommand,
 		&runCommand,
@@ -190,6 +203,7 @@ func main() {
 		&logCommand,
 		&execCommand,
 		&stopCommand,
+		&removeCommand,
 	}
 
 	if err := app.Run(os.Args); err != nil {

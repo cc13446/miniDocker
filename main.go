@@ -3,6 +3,7 @@ package main
 import (
 	"cc.com/miniDocker/cgroups/subsystems"
 	"cc.com/miniDocker/container"
+	_ "cc.com/miniDocker/nsenter"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -145,7 +146,30 @@ func main() {
 		},
 	}
 
-	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand, &listCommand, &logCommand}
+	var execCommand = cli.Command{
+		Name:  "exec",
+		Usage: "Exec a command into container.\nUsage: miniDocker exec name command",
+		Action: func(context *cli.Context) error {
+			// This is for callback
+			if os.Getenv(EnvExecPid) != "" {
+				log.Infof("Callback pid %s", os.Getgid())
+				return nil
+			}
+
+			if context.Args().Len() < 2 {
+				return fmt.Errorf("missing container name or command")
+			}
+			containerName := context.Args().Get(0)
+			var commandArray []string
+			for _, arg := range context.Args().Tail() {
+				commandArray = append(commandArray, arg)
+			}
+			ExecContainer(containerName, commandArray)
+			return nil
+		},
+	}
+
+	app.Commands = []*cli.Command{&initCommand, &runCommand, &commitCommand, &listCommand, &logCommand, &execCommand}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)

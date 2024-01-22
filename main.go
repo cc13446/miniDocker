@@ -89,6 +89,9 @@ func main() {
 				cmdArray = append(cmdArray, arg)
 			}
 
+			imageName := cmdArray[0]
+			cmdArray = cmdArray[1:]
+
 			tty := context.Bool(ttyFlagName)
 			detach := context.Bool(detachFlagName)
 			if tty && detach {
@@ -106,20 +109,21 @@ func main() {
 			log.Infof("Resolve volume conf : %s", volume)
 
 			name := context.String(containerNameFlagName)
-			Run(tty, cmdArray, resConf, volume, name)
+			Run(tty, cmdArray, resConf, volume, name, imageName)
 			return nil
 		},
 	}
 
 	commitCommand := cli.Command{
 		Name:  "commit",
-		Usage: "Commit a container into image.\nUsage: miniDocker commit [image name]",
+		Usage: "Commit a container into image.\nUsage: miniDocker commit [container name] [image name]",
 		Action: func(context *cli.Context) error {
-			if context.Args().Len() < 1 {
-				return fmt.Errorf("missing image name")
+			if context.Args().Len() < 2 {
+				return fmt.Errorf("missing image name or container name")
 			}
+			containerName := context.Args().Get(0)
 			imageName := context.Args().Get(0)
-			commitContainer(imageName)
+			commitContainer(containerName, imageName)
 			return nil
 		},
 	}

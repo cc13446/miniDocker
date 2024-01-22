@@ -9,15 +9,15 @@ import (
 	"syscall"
 )
 
-const RootPath = "./"
-const LowerPath = RootPath + "busybox"
-const UpperPath = RootPath + "upper"
-const WorkPath = RootPath + "work"
-const MergedPath = RootPath + "merged"
-const ImagePath = RootPath + "image"
+const RootPath = "/var/run/miniDocker/root/"
+const LowerPath = RootPath + "%s/lower/"
+const UpperPath = RootPath + "%s/upper/"
+const WorkPath = RootPath + "%s/work/"
+const MergedPath = RootPath + "%s/merged/"
+const ImagePath = "/var/run/miniDocker/image/"
 
 // NewParentProcess 新建容器父进程
-func NewParentProcess(tty bool, volume string, containerName string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string, containerName, imageName string) (*exec.Cmd, *os.File) {
 	// 管道
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
@@ -53,8 +53,8 @@ func NewParentProcess(tty bool, volume string, containerName string) (*exec.Cmd,
 		}
 		cmd.Stdout = stdLogFile
 	}
-	NewWorkSpace(RootPath, volume)
-	cmd.Dir = MergedPath
+	NewWorkSpace(volume, imageName, containerName)
+	cmd.Dir = fmt.Sprintf(MergedPath, containerName)
 	return cmd, writePipe
 }
 
@@ -68,58 +68,61 @@ func NewPipe() (*os.File, *os.File, error) {
 }
 
 // NewWorkSpace Create an Overlay2 filesystem as container root workspace
-func NewWorkSpace(rootPath string, volume string) {
-	CreateLower(rootPath)
-	CreateDirs()
-	MountOverlayFS()
+func NewWorkSpace(volume, imageName, containerName string) {
+	CreateLower(containerName, imageName)
+	CreateDirs(containerName)
+	MountOverlayFS(containerName)
 	if volume != "" {
 		hostPath, containerPath, err := volumeExtract(volume)
 		if err != nil {
 			log.Errorf("Extract volume failed，maybe volume parameter input is not correct，detail:%v", err)
 			return
 		}
-		mountVolume(MergedPath, hostPath, containerPath)
+		mountVolume(fmt.Sprintf(MergedPath, containerName), hostPath, containerPath)
 	}
 }
 
-func CreateLower(rootPath string) {
-	busyboxTarURL := path.Join(rootPath, "busybox.tar")
-	exist, err := PathExists(LowerPath)
+func CreateLower(containerName, imageName string) {
+	tarPath := path.Join(ImagePath, fmt.Sprintf("%s.tar", imageName))
+	unTarPath := fmt.Sprintf(LowerPath, containerName)
+	exist, err := PathExists(unTarPath)
 	if err != nil {
-		log.Infof("Fail to judge whether dir %s exists. %v", LowerPath, err)
+		log.Infof("Fail to judge whether dir %s exists. %v", unTarPath, err)
 	}
 	// 解压tar包
 	if exist == false {
-		if err := os.Mkdir(LowerPath, 0777); err != nil {
-			log.Errorf("Mkdir dir %s error. %v", LowerPath, err)
+		if err := os.MkdirAll(unTarPath, 0777); err != nil {
+			log.Errorf("Mkdir dir %s error. %v", unTarPath, err)
 		}
-		if _, err := exec.Command("tar", "-xvf", busyboxTarURL, "-C", LowerPath).CombinedOutput(); err != nil {
-			log.Errorf("Untar dir %s error %v", LowerPath, err)
+		if _, err := exec.Command("tar", "-xvf", tarPath, "-C", unTarPath).CombinedOutput(); err != nil {
+			log.Errorf("Untar dir %s error %v", unTarPath, err)
 		}
 	}
 }
 
-func CreateDirs() {
+func CreateDirs(containerName string) {
 	dirs := []string{
-		MergedPath, UpperPath, WorkPath,
+		fmt.Sprintf(MergedPath, containerName),
+		fmt.Sprintf(UpperPath, containerName),
+		fmt.Sprintf(WorkPath, containerName),
 	}
 
 	for _, dir := range dirs {
-		if err := os.Mkdir(dir, 0777); err != nil {
+		if err := os.MkdirAll(dir, 0777); err != nil {
 			log.Errorf("Mkdir dir %s error. %v", dir, err)
 		}
 	}
 }
 
-func MountOverlayFS() {
+func MountOverlayFS(containerName string) {
 	// 拼接参数
 	dirs := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s",
-		LowerPath,
-		UpperPath,
-		WorkPath)
+		fmt.Sprintf(LowerPath, containerName),
+		fmt.Sprintf(UpperPath, containerName),
+		fmt.Sprintf(WorkPath, containerName))
 
 	// 拼接完整命令
-	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, MergedPath)
+	cmd := exec.Command("mount", "-t", "overlay", "overlay", "-o", dirs, fmt.Sprintf(MergedPath, containerName))
 	log.Infof("Mount overlayfs: [%s]", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -129,7 +132,7 @@ func MountOverlayFS() {
 }
 
 // DeleteWorkSpace Delete the Overlay2 filesystem while container exit
-func DeleteWorkSpace(volume string) {
+func DeleteWorkSpace(volume, containerName string) {
 
 	// 如果指定了 volume 则需要 umount volume
 	// NOTE: 一定要要先 umount volume ，然后再删除目录，否则由于 bind mount 存在，删除临时目录会导致 volume 目录中的数据丢失。
@@ -137,29 +140,34 @@ func DeleteWorkSpace(volume string) {
 		_, containerPath, err := volumeExtract(volume)
 		if err != nil {
 			log.Errorf("extract volume failed，maybe volume parameter input is not correct，detail:%v", err)
-			return
+		} else {
+			umountVolume(fmt.Sprintf(MergedPath, containerName), containerPath)
 		}
-		umountVolume(MergedPath, containerPath)
 	}
-	UmountOverlayFS()
-	DeleteDirs()
+	UmountOverlayFS(containerName)
+	DeleteDirs(containerName)
 }
 
-func UmountOverlayFS() {
-	cmd := exec.Command("umount", MergedPath)
+func UmountOverlayFS(containerName string) {
+	containerMergePath := fmt.Sprintf(MergedPath, containerName)
+	cmd := exec.Command("umount", containerMergePath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		log.Errorf("Run unmount %s error: %v", MergedPath, err)
+		log.Errorf("Run unmount %s error: %v", containerMergePath, err)
 	}
-	if err := os.RemoveAll(MergedPath); err != nil {
-		log.Errorf("Remove dir %s error %v", MergedPath, err)
+	if err := os.RemoveAll(containerMergePath); err != nil {
+		log.Errorf("Remove dir %s error %v", containerMergePath, err)
 	}
 }
 
-func DeleteDirs() {
+func DeleteDirs(containerName string) {
 	dirs := []string{
-		MergedPath, UpperPath, WorkPath,
+		fmt.Sprintf(MergedPath, containerName),
+		fmt.Sprintf(UpperPath, containerName),
+		fmt.Sprintf(WorkPath, containerName),
+		fmt.Sprintf(LowerPath, containerName),
+		path.Join(RootPath, containerName),
 	}
 
 	for _, dir := range dirs {

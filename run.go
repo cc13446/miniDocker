@@ -16,13 +16,13 @@ import (
 )
 
 // Run 运行容器
-func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume string, containerName string) {
+func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume, containerName, imageName string) {
 	containerId := randStringBytes(10)
 	if containerName == "" {
 		containerName = containerId
 	}
 
-	parent, writePipe := container.NewParentProcess(tty, volume, containerName)
+	parent, writePipe := container.NewParentProcess(tty, volume, containerName, imageName)
 	if parent == nil {
 		log.Errorf("New parent process error")
 		return
@@ -32,7 +32,7 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 	}
 
 	// record container info
-	if err := recordContainerInfo(parent.Process.Pid, commandArray, containerName, containerId); err != nil {
+	if err := recordContainerInfo(parent.Process.Pid, commandArray, containerName, containerId, volume); err != nil {
 		log.Errorf("Record container info error %v", err)
 		return
 	}
@@ -61,8 +61,8 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 			log.Errorf("Error wait parent process, error is %v", err)
 		}
 		deleteContainerInfo(containerName)
+		container.DeleteWorkSpace(volume, containerName)
 	}
-	container.DeleteWorkSpace(volume)
 	os.Exit(-1)
 }
 
@@ -79,7 +79,7 @@ func sendInitCommand(commandArray []string, writePipe *os.File) {
 }
 
 // recordContainerInfo 记录容器信息
-func recordContainerInfo(containerPID int, commandArray []string, containerName, containerId string) error {
+func recordContainerInfo(containerPID int, commandArray []string, containerName, containerId, volume string) error {
 	createTime := time.Now().Format("2006-01-02 15:04:05")
 	command := strings.Join(commandArray, "")
 
@@ -91,6 +91,7 @@ func recordContainerInfo(containerPID int, commandArray []string, containerName,
 		CreatedTime: createTime,
 		Status:      container.RUNNING,
 		Name:        containerName,
+		Volume:      volume,
 	}
 	jsonBytes, err := json.Marshal(containerInfo)
 	if err != nil {

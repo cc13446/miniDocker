@@ -17,7 +17,7 @@ const MergedPath = RootPath + "%s/merged/"
 const ImagePath = "/var/run/miniDocker/image/"
 
 // NewParentProcess 新建容器父进程
-func NewParentProcess(tty bool, volume string, containerName, imageName string) (*exec.Cmd, *os.File) {
+func NewParentProcess(tty bool, volume string, containerName, imageName string, envSlice []string) (*exec.Cmd, *os.File) {
 	// 管道
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
@@ -35,6 +35,7 @@ func NewParentProcess(tty bool, volume string, containerName, imageName string) 
 		Unshareflags: syscall.CLONE_NEWNS,
 	}
 	cmd.ExtraFiles = []*os.File{readPipe}
+	cmd.Env = append(os.Environ(), envSlice...)
 	if tty {
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout

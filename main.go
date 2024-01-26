@@ -22,6 +22,7 @@ const cpuMaxFlagName = "cpuMax"
 const cpuSetFlagName = "cpuSet"
 const volumeFlagName = "v"
 const containerNameFlagName = "name"
+const envFlagName = "e"
 
 func main() {
 
@@ -77,6 +78,10 @@ func main() {
 				Name:  containerNameFlagName,
 				Usage: "container name; Usage: -name [name]",
 			},
+			&cli.StringSliceFlag{
+				Name:  envFlagName,
+				Usage: "set environment; Usage -e [env]",
+			},
 		},
 		// 解析参数，然后运行容器
 		Action: func(context *cli.Context) error {
@@ -109,7 +114,9 @@ func main() {
 			log.Infof("Resolve volume conf : %s", volume)
 
 			name := context.String(containerNameFlagName)
-			Run(tty, cmdArray, resConf, volume, name, imageName)
+
+			envSlice := context.StringSlice(envFlagName)
+			Run(tty, cmdArray, resConf, volume, name, imageName, envSlice)
 			return nil
 		},
 	}

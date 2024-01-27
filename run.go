@@ -4,6 +4,7 @@ import (
 	"cc.com/miniDocker/cgroups"
 	"cc.com/miniDocker/cgroups/subsystems"
 	"cc.com/miniDocker/container"
+	"cc.com/miniDocker/network"
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -16,7 +17,7 @@ import (
 )
 
 // Run 运行容器
-func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume, containerName, imageName string, envSlice []string) {
+func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume, containerName, imageName string, envSlice []string, nw string, portMapping []string) {
 	containerId := randStringBytes(10)
 	if containerName == "" {
 		containerName = containerId
@@ -52,6 +53,23 @@ func Run(tty bool, commandArray []string, res *subsystems.ResourceConfig, volume
 
 	if err := cgroupsManager.Apply(parent.Process.Pid); err != nil {
 		log.Fatal("Apply cgroups config fail, error is %v", err)
+	}
+
+	if nw != "" {
+		// config container network
+		if err := network.Init(); err != nil {
+			log.Errorf("Network init error %v", err)
+		}
+		containerInfo := &container.Info{
+			Id:          containerId,
+			Pid:         strconv.Itoa(parent.Process.Pid),
+			Name:        containerName,
+			PortMapping: portMapping,
+		}
+		if err := network.Connect(nw, containerInfo); err != nil {
+			log.Errorf("Error Connect Network %v", err)
+			return
+		}
 	}
 
 	sendInitCommand(commandArray, writePipe)

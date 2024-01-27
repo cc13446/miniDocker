@@ -6,4 +6,5 @@ use (
 	./cgroups
 	./cgroups/subsystems
 	./nsenter
+	./network
 )

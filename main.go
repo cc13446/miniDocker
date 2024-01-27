@@ -3,6 +3,7 @@ package main
 import (
 	"cc.com/miniDocker/cgroups/subsystems"
 	"cc.com/miniDocker/container"
+	"cc.com/miniDocker/network"
 	_ "cc.com/miniDocker/nsenter"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +24,8 @@ const cpuSetFlagName = "cpuSet"
 const volumeFlagName = "v"
 const containerNameFlagName = "name"
 const envFlagName = "e"
+const netFlagName = "net"
+const portFlagName = "p"
 
 func main() {
 
@@ -82,6 +85,14 @@ func main() {
 				Name:  envFlagName,
 				Usage: "set environment; Usage -e [env]",
 			},
+			&cli.StringFlag{
+				Name:  netFlagName,
+				Usage: "container network; Usage -net [network name]",
+			},
+			&cli.StringSliceFlag{
+				Name:  portFlagName,
+				Usage: "port mapping; Usage -p [hostPort:containerPort]",
+			},
 		},
 		// 解析参数，然后运行容器
 		Action: func(context *cli.Context) error {
@@ -116,7 +127,10 @@ func main() {
 			name := context.String(containerNameFlagName)
 
 			envSlice := context.StringSlice(envFlagName)
-			Run(tty, cmdArray, resConf, volume, name, imageName, envSlice)
+
+			net := context.String(netFlagName)
+			portMapping := context.StringSlice(portFlagName)
+			Run(tty, cmdArray, resConf, volume, name, imageName, envSlice, net, portMapping)
 			return nil
 		},
 	}
@@ -206,6 +220,66 @@ func main() {
 		},
 	}
 
+	var networkCommand = cli.Command{
+		Name:  "network",
+		Usage: "Container network commands.",
+		Subcommands: []*cli.Command{
+			{
+				Name:  "create",
+				Usage: "Create a container network.\n Usage miniDocker network create -driver [driver] -subnet [subnet] [network name]",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "driver",
+						Usage: "network driver",
+					},
+					&cli.StringFlag{
+						Name:  "subnet",
+						Usage: "subnet cidr",
+					},
+				},
+				Action: func(context *cli.Context) error {
+					if context.Args().Len() < 1 {
+						return fmt.Errorf("missing network name")
+					}
+					if err := network.Init(); err != nil {
+						return err
+					}
+					if err := network.CreateNetwork(context.String("driver"), context.String("subnet"), context.Args().Get(0)); err != nil {
+						return fmt.Errorf("create network error: %+v", err)
+					}
+					return nil
+				},
+			},
+			{
+				Name:  "list",
+				Usage: "List container network.\n Usage: miniDocker list",
+				Action: func(context *cli.Context) error {
+					if err := network.Init(); err != nil {
+						return err
+					}
+					network.ListNetwork()
+					return nil
+				},
+			},
+			{
+				Name:  "remove",
+				Usage: "Remove container network.\n Usage: miniDocker remove [network name]",
+				Action: func(context *cli.Context) error {
+					if context.Args().Len() < 1 {
+						return fmt.Errorf("missing network name")
+					}
+					if err := network.Init(); err != nil {
+						return err
+					}
+					if err := network.DeleteNetwork(context.Args().Get(0)); err != nil {
+						return fmt.Errorf("remove network error: %+v", err)
+					}
+					return nil
+				},
+			},
+		},
+	}
+
 	app.Commands = []*cli.Command{
 		&initCommand,
 		&runCommand,
@@ -215,6 +289,7 @@ func main() {
 		&execCommand,
 		&stopCommand,
 		&removeCommand,
+		&networkCommand,
 	}
 
 	if err := app.Run(os.Args); err != nil {
